@@ -1,4 +1,4 @@
-TARGET = alditx
+TARGET = rftx
 CC = gcc
 CFLAGS = -O3 -Wall -fomit-frame-pointer
 LIBS = -lpigpio -lpthread -lrt
@@ -27,6 +27,6 @@ clean:
 	-rm -f *.o
 	-rm -f $(TARGET)
 
-install: $(TARGET)
-	$(INSTALL) wt440h2fhem.sh $(INSTALLDIR)
-	$(INSTALL) -s wt440hrx $(INSTALLDIR)
+#install: $(TARGET)
+#	$(INSTALL) wt440h2fhem.sh $(INSTALLDIR)
+#	$(INSTALL) -s wt440hrx $(INSTALLDIR)

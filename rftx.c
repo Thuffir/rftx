@@ -17,11 +17,17 @@
 // GPIO PIN
 #define OUTPUT_PIN                  24
 
-#define MSG_BITS                    20
-#define WAVE_SIZE                   ((MSG_BITS * 2) + 2)
+#define MSG_BITS                    24
+#define WAVE_SIZE                   ((1 + MSG_BITS) * 2)
 
-#define SHORT_PULSE                630
-#define LONG_PULSE                1292
+#define SHORT_PULSE                400
+#define LONG_PULSE                1100
+#define START_PAUSE               2300
+
+#define ALT_START_PULSE           3000
+#define ALT_START_PAUSE           7200
+
+#define NUM_REPEATS                  5
 
 /***********************************************************************************************************************
  * Init functions
@@ -62,15 +68,21 @@ void Init(void)
  **********************************************************************************************************************/
 int main(void)
 {
-  //             1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
-//char msg[] = { 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0 };
-  char msg[] = { 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+  //                   1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24
+  const char msg[] = { 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
   gpioPulse_t wave[WAVE_SIZE];
   int wave_id, msgidx, waveidx = 0;
 
   wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
   wave[waveidx].gpioOff = 0;
   wave[waveidx].usDelay = SHORT_PULSE;
+//  wave[waveidx].usDelay = ALT_START_PULSE;
+  waveidx++;
+
+  wave[waveidx].gpioOn = 0;
+  wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
+  wave[waveidx].usDelay = START_PAUSE;
+//  wave[waveidx].usDelay = ALT_START_PAUSE;
   waveidx++;
 
   for(msgidx = 0; msgidx < MSG_BITS; msgidx++) {
@@ -87,20 +99,16 @@ int main(void)
       secondpulse = LONG_PULSE;
     }
 
-    wave[waveidx].gpioOn = 0;
-    wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
+    wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
+    wave[waveidx].gpioOff = 0;
     wave[waveidx].usDelay = firstpulse;
     waveidx++;
 
-    wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
-    wave[waveidx].gpioOff = 0;
+    wave[waveidx].gpioOn = 0;
+    wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
     wave[waveidx].usDelay = secondpulse;
     waveidx++;
   }
-
-  wave[waveidx].gpioOn = 0;
-  wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
-  wave[waveidx].usDelay = SHORT_PULSE;
 
   // Do init stuff
   Init();
@@ -117,12 +125,17 @@ int main(void)
     perror("gpioWaveCreate()");
     exit(EXIT_FAILURE);
   }
-  if(gpioWaveTxSend(wave_id, PI_WAVE_MODE_ONE_SHOT) < 0) {
-    perror("gpioWaveTxSend()");
+
+  if(gpioWaveChain((char []) {
+    255, 0,
+      wave_id,
+    255, 1, NUM_REPEATS, 0
+  }, 7) < 0) {
+    perror("gpioWaveChain()");
     exit(EXIT_FAILURE);
   }
-
   while(gpioWaveTxBusy());
+
   gpioTerminate();
 
   return 0;
