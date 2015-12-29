@@ -27,6 +27,5 @@ clean:
 	-rm -f *.o
 	-rm -f $(TARGET)
 
-#install: $(TARGET)
-#	$(INSTALL) wt440h2fhem.sh $(INSTALLDIR)
-#	$(INSTALL) -s wt440hrx $(INSTALLDIR)
+install: $(TARGET)
+	$(INSTALL) -s $(TARGET) $(INSTALLDIR)

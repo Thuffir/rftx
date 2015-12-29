@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdbool.h>
 #include <pigpio.h>
 
 // GPIO PIN
@@ -27,21 +28,56 @@
 #define ALT_START_PULSE           3000
 #define ALT_START_PAUSE           7200
 
-#define NUM_REPEATS                  5
+#define NUM_REPEATS                  8
+
+#define INIT_TRIES                 100
+#define INIT_TRY_SLEEP             0.1
+
+// Possible states
+typedef enum {
+  StateOff = 0,
+  StateOn  = 1,
+  StateInvalid
+} StateType;
+
+// Possible Channels
+typedef enum {
+  Ch1   = 0,
+  Ch2   = 1,
+  Ch3   = 2,
+  Ch4   = 3,
+  ChAll = 4,
+  ChInvalid
+} ChannelType;
+
+// Bit Type
+typedef enum {
+  BitZero = 0,
+  BitOne  = 1,
+  BitInvalid
+} BitType;
 
 /***********************************************************************************************************************
  * Init functions
  **********************************************************************************************************************/
-void Init(void)
+static void Init(void)
 {
-  // Set smaple rate
+  uint32_t try = 0;
+
+  // Set sample rate
   if(gpioCfgClock(10, PI_CLOCK_PCM, 0)) {
     perror("gpioCfgClock()");
     exit(EXIT_FAILURE);
   }
 
   // Initialise GPIO library
-  if(gpioInitialise() < 0) {
+  for(try = 0; try < INIT_TRIES; try++) {
+    if(gpioInitialise() >= 0) {
+      break;
+    }
+    time_sleep(INIT_TRY_SLEEP);
+  }
+  if(try >= INIT_TRIES) {
     perror("gpioInitialise()");
     exit(EXIT_FAILURE);
   }
@@ -62,56 +98,100 @@ void Init(void)
   }
 }
 
-
-/***********************************************************************************************************************
- * Main
- **********************************************************************************************************************/
-int main(void)
+static uint16_t GetCode(ChannelType channel, StateType state)
 {
-  //                   1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24
-  const char msg[] = { 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
-  gpioPulse_t wave[WAVE_SIZE];
-  int wave_id, msgidx, waveidx = 0;
+  static const uint16_t groupA[] = { 0x8F24, 0xC357, 0x57DB, 0xE5C3 };
+  static const uint16_t groupB[] = { 0xBABA, 0x1842, 0x6D01, 0x42F9 };
+  static const uint16_t *codeTable[2][5] = {
+    //              Ch1     Ch2      Ch3    Ch4     All
+    [StateOff] = { groupB, groupB, groupB, groupA, groupA },
+    [StateOn]  = { groupA, groupA, groupA, groupB, groupB }
+  };
+  static const uint16_t *group;
+  uint8_t pick;
 
+  group = codeTable[state][channel];
+  pick = gpioTick() % (sizeof(groupA) / sizeof(groupA[0]));
+
+  return group[pick];
+}
+
+static uint8_t GetChannel(ChannelType channel)
+{
+  static const uint8_t channelTable[] = { 0, 2, 6, 1, 5 };
+
+  return channelTable[channel];
+}
+
+static uint32_t AddBit(gpioPulse_t *wave, uint32_t waveidx, BitType bit)
+{
+  uint32_t firstpulse, secondpulse;
+
+  // One
+  if(bit) {
+    firstpulse = LONG_PULSE;
+    secondpulse = SHORT_PULSE;
+  }
+  // Zero
+  else {
+    firstpulse = SHORT_PULSE;
+    secondpulse = LONG_PULSE;
+  }
+
+  wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
+  wave[waveidx].gpioOff = 0;
+  wave[waveidx].usDelay = firstpulse;
+  waveidx++;
+
+  wave[waveidx].gpioOn = 0;
+  wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
+  wave[waveidx].usDelay = secondpulse;
+  waveidx++;
+
+  return waveidx;
+}
+
+static int BuildWave(ChannelType channel, StateType state)
+{
+
+  const uint8_t preamble[] = { 1, 1, 0, 0 };
+  gpioPulse_t wave[WAVE_SIZE];
+  int wave_id;
+  uint32_t i, waveidx = 0;
+  uint16_t code;
+  uint8_t ch;
+
+  // Start Pulse
   wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
   wave[waveidx].gpioOff = 0;
   wave[waveidx].usDelay = SHORT_PULSE;
 //  wave[waveidx].usDelay = ALT_START_PULSE;
   waveidx++;
-
   wave[waveidx].gpioOn = 0;
   wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
   wave[waveidx].usDelay = START_PAUSE;
 //  wave[waveidx].usDelay = ALT_START_PAUSE;
   waveidx++;
 
-  for(msgidx = 0; msgidx < MSG_BITS; msgidx++) {
-    int firstpulse, secondpulse;
-
-    // One
-    if(msg[msgidx]) {
-      firstpulse = LONG_PULSE;
-      secondpulse = SHORT_PULSE;
-    }
-    // Zero
-    else {
-      firstpulse = SHORT_PULSE;
-      secondpulse = LONG_PULSE;
-    }
-
-    wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
-    wave[waveidx].gpioOff = 0;
-    wave[waveidx].usDelay = firstpulse;
-    waveidx++;
-
-    wave[waveidx].gpioOn = 0;
-    wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
-    wave[waveidx].usDelay = secondpulse;
-    waveidx++;
+  // Preamble
+  for(i = 0; i < sizeof(preamble); i++) {
+    waveidx = AddBit(wave, waveidx, preamble[i]);
   }
 
-  // Do init stuff
-  Init();
+  // Code
+  code = GetCode(channel, state);
+  for(i = 0; i < (sizeof(code) * 8); i++) {
+    waveidx = AddBit(wave, waveidx, (code & (0x8000 >> i)) ? BitOne : BitZero);
+  }
+
+  // Channel
+  ch = GetChannel(channel);
+  for(i = 0; i < 3; i++) {
+    waveidx = AddBit(wave, waveidx, (ch & (0x4 >> i)) ? BitOne : BitZero);
+  }
+
+  // Trailing Zero Bit
+  waveidx = AddBit(wave, waveidx, BitZero);
 
   if(gpioWaveAddNew()) {
     perror("gpioWaveAddNew()");
@@ -126,6 +206,40 @@ int main(void)
     exit(EXIT_FAILURE);
   }
 
+  return wave_id;
+}
+
+/***********************************************************************************************************************
+ * Main
+ **********************************************************************************************************************/
+int main(int argc, char *argv[])
+{
+  int wave_id;
+  ChannelType channel;
+  StateType state;
+
+  if(argc != 3) {
+    fprintf(stderr, "arguments\n");
+    exit(EXIT_FAILURE);
+  }
+
+  channel = atoi(argv[1]) - 1;
+  if(channel >= ChInvalid) {
+    fprintf(stderr, "channel\n");
+    exit(EXIT_FAILURE);
+  }
+
+  state = atoi(argv[2]);
+  if(state >= StateInvalid) {
+    fprintf(stderr, "state\n");
+    exit(EXIT_FAILURE);
+  }
+
+  // Do init stuff
+  Init();
+
+  wave_id = BuildWave(channel, state);
+
   if(gpioWaveChain((char []) {
     255, 0,
       wave_id,
@@ -134,7 +248,9 @@ int main(void)
     perror("gpioWaveChain()");
     exit(EXIT_FAILURE);
   }
-  while(gpioWaveTxBusy());
+  while(gpioWaveTxBusy()) {
+    time_sleep(0.1);
+  }
 
   gpioTerminate();
 
