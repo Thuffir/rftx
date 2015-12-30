@@ -37,9 +37,12 @@
 // GPIO PIN
 #define OUTPUT_PIN                  24
 
+// Number of tries to initialize the library
 #define INIT_TRIES                 100
+// Pause between initialization tries [s]
 #define INIT_TRY_SLEEP             0.1
 
+// Transmitter Modules
 #define MODULE_GT9000_ENABLE
 
 #endif // CONFIG_H_

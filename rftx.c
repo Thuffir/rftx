@@ -51,7 +51,7 @@ static void Init(void)
     exit(EXIT_FAILURE);
   }
 
-  // Initialise GPIO library
+  // Initialise GPIO library with retries
   for(try = 0; try < INIT_TRIES; try++) {
     if(gpioInitialise() >= 0) {
       break;
@@ -63,16 +63,19 @@ static void Init(void)
     exit(EXIT_FAILURE);
   }
 
+  // Set Pullups and Pulldowns
   if(gpioSetPullUpDown(OUTPUT_PIN, PI_PUD_OFF)) {
     perror("gpioSetPullUpDown()");
     exit(EXIT_FAILURE);
   }
 
+  // Set GPIO mode
   if(gpioSetMode(OUTPUT_PIN, PI_OUTPUT)) {
     perror("gpioSetMode()");
     exit(EXIT_FAILURE);
   }
 
+  // Set GPIO to Low
   if(gpioWrite(OUTPUT_PIN, 0)) {
     perror("gpioWrite()");
     exit(EXIT_FAILURE);
@@ -84,6 +87,7 @@ static void Init(void)
  **********************************************************************************************************************/
 int main(int argc, char *argv[])
 {
+  // Check for minimal number of arguments (module specifier should be present)
   if(argc < 2) {
     fprintf(stderr, "%s: invalid arguments!\n", argv[0]);
     exit(EXIT_FAILURE);
@@ -92,8 +96,10 @@ int main(int argc, char *argv[])
   // Do init stuff
   Init();
 
+  // Call Module handlers
   Gt9000Handle(argc, argv);
 
+  // Terminate the library and clean up
   gpioTerminate();
 
   return 0;
