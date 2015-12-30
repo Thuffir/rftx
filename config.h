@@ -31,70 +31,15 @@
  *
  **********************************************************************************************************************/
 
-#include "config.h"
+#ifndef CONFIG_H_
+#define CONFIG_H_
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <pigpio.h>
-#include "gt9000.h"
+// GPIO PIN
+#define OUTPUT_PIN                  24
 
-/***********************************************************************************************************************
- * Init functions
- **********************************************************************************************************************/
-static void Init(void)
-{
-  uint32_t try = 0;
+#define INIT_TRIES                 100
+#define INIT_TRY_SLEEP             0.1
 
-  // Set sample rate
-  if(gpioCfgClock(10, PI_CLOCK_PCM, 0)) {
-    perror("gpioCfgClock()");
-    exit(EXIT_FAILURE);
-  }
+#define MODULE_GT9000_ENABLE
 
-  // Initialise GPIO library
-  for(try = 0; try < INIT_TRIES; try++) {
-    if(gpioInitialise() >= 0) {
-      break;
-    }
-    time_sleep(INIT_TRY_SLEEP);
-  }
-  if(try >= INIT_TRIES) {
-    perror("gpioInitialise()");
-    exit(EXIT_FAILURE);
-  }
-
-  if(gpioSetPullUpDown(OUTPUT_PIN, PI_PUD_OFF)) {
-    perror("gpioSetPullUpDown()");
-    exit(EXIT_FAILURE);
-  }
-
-  if(gpioSetMode(OUTPUT_PIN, PI_OUTPUT)) {
-    perror("gpioSetMode()");
-    exit(EXIT_FAILURE);
-  }
-
-  if(gpioWrite(OUTPUT_PIN, 0)) {
-    perror("gpioWrite()");
-    exit(EXIT_FAILURE);
-  }
-}
-
-/***********************************************************************************************************************
- * Main
- **********************************************************************************************************************/
-int main(int argc, char *argv[])
-{
-  if(argc < 2) {
-    fprintf(stderr, "%s: invalid arguments!\n", argv[0]);
-    exit(EXIT_FAILURE);
-  }
-
-  // Do init stuff
-  Init();
-
-  Gt9000Handle(argc, argv);
-
-  gpioTerminate();
-
-  return 0;
-}
+#endif // CONFIG_H_
