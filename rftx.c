@@ -37,6 +37,7 @@
 #include <stdio.h>
 #include <pigpio.h>
 #include "gt9000.h"
+#include "dmv7008.h"
 
 /***********************************************************************************************************************
  * Init functions
@@ -44,6 +45,9 @@
 static void Init(void)
 {
   uint32_t try = 0;
+
+  // Disable interfaces
+  gpioCfgInterfaces(PI_DISABLE_FIFO_IF | PI_DISABLE_SOCK_IF);
 
   // Set sample rate
   if(gpioCfgClock(10, PI_CLOCK_PCM, 0)) {
@@ -98,6 +102,7 @@ int main(int argc, char *argv[])
 
   // Call Module handlers
   Gt9000Handle(argc, argv);
+  Dmv7008Handle(argc, argv);
 
   // Terminate the library and clean up
   gpioTerminate();

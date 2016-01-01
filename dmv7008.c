@@ -33,7 +33,7 @@
 
 #include "config.h"
 
-#ifdef MODULE_GT9000_ENABLE
+#ifdef MODULE_DMV7008_ENABLE
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -41,23 +41,24 @@
 #include <pigpio.h>
 
 // Message and wave length
-#define MSG_BITS                    24
-#define WAVE_SIZE                   ((1 + MSG_BITS) * 2)
+#define MSG_BITS                    20
+#define WAVE_SIZE                   (1 + (MSG_BITS * 2) + 1)
 
 // Pulse lengths
-#define SHORT_PULSE                400
-#define LONG_PULSE                1100
-#define START_PAUSE               2300
+#define SHORT_PULSE                630
+#define LONG_PULSE                1292
 
-// Alternative start pulse length
-#define ALT_START_PULSE           3000
-#define ALT_START_PAUSE           7200
+// Pause between repeats
+#define TLG_PAUSE                73700
 
 // Number of telegram repeats
-#define NUM_REPEATS                  8
+#define NUM_REPEATS                  4
+
+// Upper limit of house code
+#define MAX_CODE                 0xFFF
 
 // Name of the module
-static const char moduleName[] = "gt9000";
+static const char moduleName[] = "dmv7008";
 
 // Possible states
 typedef enum {
@@ -84,37 +85,12 @@ typedef enum {
 } BitType;
 
 /***********************************************************************************************************************
- * Get a Code corresponding to channel and state
- **********************************************************************************************************************/
-static uint16_t Gt9000GetCode(ChannelType channel, StateType state)
-{
-  // Code groups
-  static const uint16_t groupA[] = { 0x8F24, 0xC357, 0x57DB, 0xE5C3 };
-  static const uint16_t groupB[] = { 0xBABA, 0x1842, 0x6D01, 0x42F9 };
-  // Channel and State to Code group assignment table
-  static const uint16_t *codeTable[2][5] = {
-    //              Ch1     Ch2      Ch3    Ch4     All
-    [StateOff] = { groupB, groupB, groupB, groupA, groupA },
-    [StateOn]  = { groupA, groupA, groupA, groupB, groupB }
-  };
-  static const uint16_t *group;
-  uint8_t pick;
-
-  // Get code group
-  group = codeTable[state][channel];
-  // Pick a time dependent code from code group
-  pick = gpioTick() % (sizeof(groupA) / sizeof(groupA[0]));
-
-  return group[pick];
-}
-
-/***********************************************************************************************************************
  * Get the Physical channel number
  **********************************************************************************************************************/
-static uint8_t Gt9000GetChannel(ChannelType channel)
+static uint8_t Dmv7008GetChannel(ChannelType channel)
 {
   // Logical to Physical channel assignment
-  static const uint8_t channelTable[] = { 0, 2, 6, 1, 5 };
+  static const uint8_t channelTable[] = { 0, 4, 2, 6, 7 };
 
   return channelTable[channel];
 }
@@ -122,7 +98,7 @@ static uint8_t Gt9000GetChannel(ChannelType channel)
 /***********************************************************************************************************************
  * Add one bit to the waveform
  **********************************************************************************************************************/
-static uint32_t Gt9000AddBit(gpioPulse_t *wave, uint32_t waveidx, BitType bit)
+static uint32_t Dmv7008AddBit(gpioPulse_t *wave, uint32_t waveidx, BitType bit)
 {
   uint32_t firstpulse, secondpulse;
 
@@ -137,15 +113,15 @@ static uint32_t Gt9000AddBit(gpioPulse_t *wave, uint32_t waveidx, BitType bit)
     secondpulse = LONG_PULSE;
   }
 
-  // Add first pulse (High)
-  wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
-  wave[waveidx].gpioOff = 0;
+  // Add first pulse (Low)
+  wave[waveidx].gpioOn = 0;
+  wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
   wave[waveidx].usDelay = firstpulse;
   waveidx++;
 
-  // Add second pulse (Low)
-  wave[waveidx].gpioOn = 0;
-  wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
+  // Add second pulse (High)
+  wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
+  wave[waveidx].gpioOff = 0;
   wave[waveidx].usDelay = secondpulse;
   waveidx++;
 
@@ -155,48 +131,55 @@ static uint32_t Gt9000AddBit(gpioPulse_t *wave, uint32_t waveidx, BitType bit)
 /***********************************************************************************************************************
  * Build Waveform to transmit
  **********************************************************************************************************************/
-static int Gt9000BuildWave(ChannelType channel, StateType state)
+static int Dmv7008BuildWave(uint16_t code, ChannelType channel, StateType state)
 {
-  // Premable bits
-  const uint8_t preamble[] = { 1, 1, 0, 0 };
   // The waveform
   gpioPulse_t wave[WAVE_SIZE];
   int wave_id;
   uint32_t i, waveidx = 0;
-  uint16_t code;
   uint8_t ch;
+  BitType csum[2] = { BitZero, BitZero }, bit;
 
   // Add Start Pulse
   wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
   wave[waveidx].gpioOff = 0;
   wave[waveidx].usDelay = SHORT_PULSE;
-//  wave[waveidx].usDelay = ALT_START_PULSE;
   waveidx++;
+
+  // Add Housecode (12 Bits)
+  for(i = 0; i < 12; i++) {
+    waveidx = Dmv7008AddBit(wave, waveidx, (code & (0x800 >> i)) ? BitOne : BitZero);
+  }
+
+  // Add Channel (3 Bits)
+  ch = Dmv7008GetChannel(channel);
+  for(i = 0; i < 3; i++) {
+    bit = (ch & (0x4 >> i)) ? BitOne : BitZero;
+    waveidx = Dmv7008AddBit(wave, waveidx, bit);
+    csum[i % 2] ^= bit;
+  }
+
+  // Add Switch state (1 Bit)
+  bit = (state) ? BitOne : BitZero;
+  waveidx = Dmv7008AddBit(wave, waveidx, bit);
+  csum[1] ^= bit;
+
+  // Add Dim state (1 Bit) (Todo: Not yet supported.)
+  waveidx = Dmv7008AddBit(wave, waveidx, BitZero);
+  // Don't forget the checksum here
+
+  // Add unknown bit (1 Bit) (Zero)
+  waveidx = Dmv7008AddBit(wave, waveidx, BitZero);
+
+  // Add Checksum
+  waveidx = Dmv7008AddBit(wave, waveidx, csum[0]);
+  waveidx = Dmv7008AddBit(wave, waveidx, csum[1]);
+
+  // Add pause at the end
   wave[waveidx].gpioOn = 0;
   wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
-  wave[waveidx].usDelay = START_PAUSE;
-//  wave[waveidx].usDelay = ALT_START_PAUSE;
+  wave[waveidx].usDelay = TLG_PAUSE;
   waveidx++;
-
-  // Add Preamble
-  for(i = 0; i < sizeof(preamble); i++) {
-    waveidx = Gt9000AddBit(wave, waveidx, preamble[i]);
-  }
-
-  // Add Code
-  code = Gt9000GetCode(channel, state);
-  for(i = 0; i < (sizeof(code) * 8); i++) {
-    waveidx = Gt9000AddBit(wave, waveidx, (code & (0x8000 >> i)) ? BitOne : BitZero);
-  }
-
-  // Add Channel
-  ch = Gt9000GetChannel(channel);
-  for(i = 0; i < 3; i++) {
-    waveidx = Gt9000AddBit(wave, waveidx, (ch & (0x4 >> i)) ? BitOne : BitZero);
-  }
-
-  // Add Trailing Zero Bit
-  waveidx = Gt9000AddBit(wave, waveidx, BitZero);
 
   // Add a new empty waveform
   if(gpioWaveAddNew()) {
@@ -220,9 +203,10 @@ static int Gt9000BuildWave(ChannelType channel, StateType state)
 /***********************************************************************************************************************
  * GT9000 Handler
  **********************************************************************************************************************/
-void Gt9000Handle(int argc, char *argv[])
+void Dmv7008Handle(int argc, char *argv[])
 {
   int wave_id;
+  uint16_t code;
   ChannelType channel;
   StateType state;
 
@@ -231,28 +215,35 @@ void Gt9000Handle(int argc, char *argv[])
     return;
   }
 
-  // There should be 3 arguments (plus program name)
-  if(argc != 4) {
+  // There should be 4 arguments (plus program name)
+  if(argc != 5) {
     fprintf(stderr, "%s: invalid arguments!\n", moduleName);
     exit(EXIT_FAILURE);
   }
 
+  // Convert house code
+  code = strtol(argv[2], NULL, 16);
+  if(code > MAX_CODE) {
+    fprintf(stderr, "%s: invalid house code!\n", moduleName);
+    exit(EXIT_FAILURE);
+  }
+
   // Convert channel number
-  channel = atoi(argv[2]) - 1;
+  channel = atoi(argv[3]) - 1;
   if(channel >= ChInvalid) {
     fprintf(stderr, "%s: invalid channel!\n", moduleName);
     exit(EXIT_FAILURE);
   }
 
   // Convert switch state
-  state = atoi(argv[3]);
+  state = atoi(argv[4]);
   if(state >= StateInvalid) {
     fprintf(stderr, "%s: invalid state!\n", moduleName);
     exit(EXIT_FAILURE);
   }
 
   // Build Telegram Waveform
-  wave_id = Gt9000BuildWave(channel, state);
+  wave_id = Dmv7008BuildWave(code, channel, state);
 
   // Transmit the waveform NUM_REPEATS times
   if(gpioWaveChain((char []) {
@@ -276,4 +267,4 @@ void Gt9000Handle(int argc, char *argv[])
   }
 }
 
-#endif // MODULE_GT9000_ENABLE
+#endif // MODULE_DMV7008_ENABLE

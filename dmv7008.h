@@ -31,19 +31,14 @@
  *
  **********************************************************************************************************************/
 
-#ifndef CONFIG_H_
-#define CONFIG_H_
+#include "config.h"
 
-// GPIO PIN
-#define OUTPUT_PIN                  24
+#ifdef MODULE_DMV7008_ENABLE
 
-// Number of tries to initialize the library
-#define INIT_TRIES                 100
-// Pause between initialization tries [s]
-#define INIT_TRY_SLEEP             0.1
+void Dmv7008Handle(int argc, char *argv[]);
 
-// Transmitter Modules
-#define MODULE_GT9000_ENABLE
-#define MODULE_DMV7008_ENABLE
+#else // MODULE_DMV7008_ENABLE
 
-#endif // CONFIG_H_
+#define Dmv7008Handle(x, y)
+
+#endif // MODULE_DMV7008_ENABLE
