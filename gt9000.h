@@ -31,14 +31,16 @@
  *
  **********************************************************************************************************************/
 
-#include "config.h"
+#ifndef GT9000_H_
+#define GT9000_H_
 
+#include "config.h"
 #ifdef MODULE_GT9000_ENABLE
 
 void Gt9000Handle(int argc, char *argv[]);
 
 #else // MODULE_GT9000_ENABLE
-
 #define Gt9000Handle(x, y)
-
 #endif // MODULE_GT9000_ENABLE
+
+#endif // GT9000_H_

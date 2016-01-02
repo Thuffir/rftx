@@ -32,7 +32,6 @@
  **********************************************************************************************************************/
 
 #include "config.h"
-
 #ifdef MODULE_GT9000_ENABLE
 
 #include <stdlib.h>
@@ -225,6 +224,12 @@ void Gt9000Handle(int argc, char *argv[])
   int wave_id;
   ChannelType channel;
   StateType state;
+
+  // Provide help if asked for
+  if(argc < 2) {
+    printf(" %s %s channel[1-5] state[0-1]\n", argv[0], moduleName);
+    return;
+  }
 
   // Check if the arguments are meant for us
   if(strcmp(argv[1], moduleName) != 0) {

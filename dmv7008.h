@@ -31,14 +31,16 @@
  *
  **********************************************************************************************************************/
 
-#include "config.h"
+#ifndef DMV7008_H_
+#define DMV7008_H_
 
+#include "config.h"
 #ifdef MODULE_DMV7008_ENABLE
 
 void Dmv7008Handle(int argc, char *argv[]);
 
 #else // MODULE_DMV7008_ENABLE
-
 #define Dmv7008Handle(x, y)
-
 #endif // MODULE_DMV7008_ENABLE
+
+#endif // DMV7008_H_

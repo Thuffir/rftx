@@ -5,7 +5,7 @@ LIBS = -lpigpio -lpthread -lrt
 LFLAGS = -s
 
 INSTALLDIR = /opt/fhem
-INSTALL = sudo install -m 755 -o root -g root
+INSTALL = sudo install -m 4755 -o root -g root
 
 .PHONY: default all clean
 

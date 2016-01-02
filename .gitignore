@@ -1,3 +1,5 @@
 include
 .cproject
 .project
+*.o
+rftx

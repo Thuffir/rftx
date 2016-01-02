@@ -32,7 +32,6 @@
  **********************************************************************************************************************/
 
 #include "config.h"
-
 #ifdef MODULE_DMV7008_ENABLE
 
 #include <stdlib.h>
@@ -209,6 +208,12 @@ void Dmv7008Handle(int argc, char *argv[])
   uint16_t code;
   ChannelType channel;
   StateType state;
+
+  // Provide help if asked for
+  if(argc < 2) {
+    printf(" %s %s housecoode[000-FFF] channel[1-5] state[0-1]\n", argv[0], moduleName);
+    return;
+  }
 
   // Check if the arguments are meant for us
   if(strcmp(argv[1], moduleName) != 0) {

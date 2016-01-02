@@ -35,6 +35,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <pigpio.h>
 #include "gt9000.h"
 #include "dmv7008.h"
@@ -91,10 +92,9 @@ static void Init(void)
  **********************************************************************************************************************/
 int main(int argc, char *argv[])
 {
-  // Check for minimal number of arguments (module specifier should be present)
+  // Provide help if asked for
   if(argc < 2) {
-    fprintf(stderr, "%s: invalid arguments!\n", argv[0]);
-    exit(EXIT_FAILURE);
+    printf("Usage:\n");
   }
 
   // Do init stuff
