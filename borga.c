@@ -96,7 +96,7 @@ void BorgaHandle(int argc, char *argv[])
   command = toupper(argv[3][0]);
 
   // Reset waveform
-  WaveInitialize();
+  WaveInitialize(0);
 
   // Add start pulse
   WaveAddPulse(1, SHORT_PULSE);

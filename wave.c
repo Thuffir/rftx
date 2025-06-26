@@ -39,7 +39,7 @@
 #include <pigpio.h>
 
 // Short pulse length for debug visualisation (0 -> disable)
-uint32_t waveDebugShortPulseLength = 0;
+static uint32_t waveDebugShortPulseLength = 0;
 
 // Running wave time
 static uint32_t waveTime = 0;
@@ -47,7 +47,7 @@ static uint32_t waveTime = 0;
 /***********************************************************************************************************************
  * Initialize a new wave
  **********************************************************************************************************************/
-void WaveInitialize(void)
+void WaveInitialize(uint32_t debugShortPulseLength)
 {
   // Clear all waves
   if(gpioWaveClear()) {
@@ -57,6 +57,9 @@ void WaveInitialize(void)
 
   // Reset wave time
   waveTime = 0;
+
+  // Set debug short pulse length
+  waveDebugShortPulseLength = debugShortPulseLength;
 }
 
 /***********************************************************************************************************************

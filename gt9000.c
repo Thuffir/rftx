@@ -2,7 +2,7 @@
  *
  * Wireless Signal Transmitter for Raspberry Pi
  *
- * (C) 2015 Gergely Budai
+ * By Gergely Budai
  *
  * This is free and unencumbered software released into the public domain.
  *
@@ -39,9 +39,7 @@
 #include <string.h>
 #include <pigpio.h>
 
-// Message and wave length
-#define MSG_BITS                    24
-#define WAVE_SIZE                   ((1 + MSG_BITS) * 2)
+#include "wave.h"
 
 // Pulse lengths
 #define SHORT_PULSE                400
@@ -119,101 +117,12 @@ static uint8_t Gt9000GetChannel(ChannelType channel)
 }
 
 /***********************************************************************************************************************
- * Add one bit to the waveform
+ * Add one bit to the waveform (0 -> ‾‾\____, 1 -> ‾‾‾‾\__)
  **********************************************************************************************************************/
-static uint32_t Gt9000AddBit(gpioPulse_t *wave, uint32_t waveidx, BitType bit)
+static void Gt9000AddBit(BitType bit)
 {
-  uint32_t firstpulse, secondpulse;
-
-  // Bit One
-  if(bit) {
-    firstpulse = LONG_PULSE;
-    secondpulse = SHORT_PULSE;
-  }
-  // Bit Zero
-  else {
-    firstpulse = SHORT_PULSE;
-    secondpulse = LONG_PULSE;
-  }
-
-  // Add first pulse (High)
-  wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
-  wave[waveidx].gpioOff = 0;
-  wave[waveidx].usDelay = firstpulse;
-  waveidx++;
-
-  // Add second pulse (Low)
-  wave[waveidx].gpioOn = 0;
-  wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
-  wave[waveidx].usDelay = secondpulse;
-  waveidx++;
-
-  return waveidx;
-}
-
-/***********************************************************************************************************************
- * Build Waveform to transmit
- **********************************************************************************************************************/
-static int Gt9000BuildWave(ChannelType channel, StateType state)
-{
-  // Premable bits
-  const uint8_t preamble[] = { 1, 1, 0, 0 };
-  // The waveform
-  gpioPulse_t wave[WAVE_SIZE];
-  int wave_id;
-  uint32_t i, waveidx = 0;
-  uint16_t code;
-  uint8_t ch;
-
-  // Add Start Pulse
-  wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
-  wave[waveidx].gpioOff = 0;
-  wave[waveidx].usDelay = SHORT_PULSE;
-//  wave[waveidx].usDelay = ALT_START_PULSE;
-  waveidx++;
-  wave[waveidx].gpioOn = 0;
-  wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
-  wave[waveidx].usDelay = START_PAUSE;
-//  wave[waveidx].usDelay = ALT_START_PAUSE;
-  waveidx++;
-
-  // Add Preamble
-  for(i = 0; i < sizeof(preamble); i++) {
-    waveidx = Gt9000AddBit(wave, waveidx, preamble[i]);
-  }
-
-  // Add Code
-  code = Gt9000GetCode(channel, state);
-  for(i = 0; i < (sizeof(code) * 8); i++) {
-    waveidx = Gt9000AddBit(wave, waveidx, (code & (0x8000 >> i)) ? BitOne : BitZero);
-  }
-
-  // Add Channel
-  ch = Gt9000GetChannel(channel);
-  for(i = 0; i < 3; i++) {
-    waveidx = Gt9000AddBit(wave, waveidx, (ch & (0x4 >> i)) ? BitOne : BitZero);
-  }
-
-  // Add Trailing Zero Bit
-  waveidx = Gt9000AddBit(wave, waveidx, BitZero);
-
-  // Add a new empty waveform
-  if(gpioWaveAddNew()) {
-    perror("gpioWaveAddNew()");
-    exit(EXIT_FAILURE);
-  }
-  // Add pulses to the waveform
-  if(gpioWaveAddGeneric(WAVE_SIZE, wave) < 0) {
-    perror("gpioWaveAddGeneric()");
-    exit(EXIT_FAILURE);
-  }
-  // Create waveform
-  if((wave_id = gpioWaveCreate()) < 0) {
-    perror("gpioWaveCreate()");
-    exit(EXIT_FAILURE);
-  }
-
-  return wave_id;
+  WaveAddPulse(1, bit ? LONG_PULSE : SHORT_PULSE);
+  WaveAddPulse(0, bit ? SHORT_PULSE : LONG_PULSE);
 }
 
 /***********************************************************************************************************************
@@ -221,7 +130,6 @@ static int Gt9000BuildWave(ChannelType channel, StateType state)
  **********************************************************************************************************************/
 void Gt9000Handle(int argc, char *argv[])
 {
-  int wave_id;
   ChannelType channel;
   StateType state;
 
@@ -256,29 +164,36 @@ void Gt9000Handle(int argc, char *argv[])
     exit(EXIT_FAILURE);
   }
 
-  // Build Telegram Waveform
-  wave_id = Gt9000BuildWave(channel, state);
+  // Init wave
+  WaveInitialize(0);
 
-  // Transmit the waveform NUM_REPEATS times
-  if(gpioWaveChain((char []) {
-    255, 0,
-      wave_id,
-    255, 1, NUM_REPEATS, 0
-  }, 7) < 0) {
-    perror("gpioWaveChain()");
-    exit(EXIT_FAILURE);
+  // Add Start Pulse
+  WaveAddPulse(1, SHORT_PULSE);
+  WaveAddPulse(0, START_PAUSE);
+
+  // Add Preamble
+  const uint8_t preamble[] = { 1, 1, 0, 0 };
+  for(int i = 0; i < sizeof(preamble); i++) {
+    Gt9000AddBit(preamble[i]);
   }
 
-  // Wait until the transmission has been sent out
-  while(gpioWaveTxBusy()) {
-    time_sleep(0.1);
+  // Add Code
+  uint16_t code = Gt9000GetCode(channel, state);
+  for(int i = 0; i < (sizeof(code) * 8); i++) {
+    Gt9000AddBit((code & (0x8000 >> i)) ? BitOne : BitZero);
   }
 
-  //  Delete the wave
-  if(gpioWaveDelete(wave_id) < 0) {
-    perror("gpioWaveDelete()");
-    exit(EXIT_FAILURE);
+  // Add Channel
+  uint8_t ch = Gt9000GetChannel(channel);
+  for(int i = 0; i < 3; i++) {
+    Gt9000AddBit((ch & (0x4 >> i)) ? BitOne : BitZero);
   }
+
+  // Add Trailing Zero Bit
+  Gt9000AddBit(BitZero);
+
+  // Transmit wave
+  WaveTransmit(NUM_REPEATS);
 }
 
 #endif // MODULE_GT9000_ENABLE
