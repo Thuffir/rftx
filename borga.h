@@ -2,7 +2,7 @@
  *
  * Wireless Signal Transmitter for Raspberry Pi
  *
- * (C) 2015 Gergely Budai
+ * By Gergely Budai
  *
  * This is free and unencumbered software released into the public domain.
  *
@@ -31,23 +31,16 @@
  *
  **********************************************************************************************************************/
 
-#ifndef CONFIG_H_
-#define CONFIG_H_
+#ifndef BORGA_H_
+#define BORGA_H_
 
-// GPIO PIN
-#define OUTPUT_PIN                  12
+#include "config.h"
+#ifdef MODULE_BORGA_ENABLE
 
-// Number of tries to initialize the library
-#define INIT_TRIES                 100
-// Pause between initialization tries [s]
-#define INIT_TRY_SLEEP             0.1
+void BorgaHandle(int argc, char *argv[]);
 
-// Polling delay for wave tx complete [s]
-#define WAVE_TX_POLL_DELAY         0.1
+#else // MODULE_BORGA_ENABLE
+#define BorgaHandle(x, y)
+#endif // MODULE_DMV7008_ENABLE
 
-// Transmitter Modules
-#define MODULE_GT9000_ENABLE
-#define MODULE_DMV7008_ENABLE
-#define MODULE_BORGA_ENABLE
-
-#endif // CONFIG_H_
+#endif // BORGA_H_

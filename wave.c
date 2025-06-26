@@ -2,7 +2,7 @@
  *
  * Wireless Signal Transmitter for Raspberry Pi
  *
- * (C) 2015 Gergely Budai
+ * By Gergely Budai
  *
  * This is free and unencumbered software released into the public domain.
  *
@@ -32,82 +32,111 @@
  **********************************************************************************************************************/
 
 #include "config.h"
+#include "wave.h"
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 #include <pigpio.h>
-#include "gt9000.h"
-#include "dmv7008.h"
-#include "borga.h"
+
+// Short pulse length for debug visualisation (0 -> disable)
+uint32_t waveDebugShortPulseLength = 0;
+
+// Running wave time
+static uint32_t waveTime = 0;
 
 /***********************************************************************************************************************
- * Init functions
+ * Initialize a new wave
  **********************************************************************************************************************/
-static void Init(void)
+void WaveInitialize(void)
 {
-  uint32_t try = 0;
-
-  // Disable interfaces
-  gpioCfgInterfaces(PI_DISABLE_FIFO_IF | PI_DISABLE_SOCK_IF);
-
-  // Set sample rate
-  if(gpioCfgClock(10, PI_CLOCK_PCM, 0)) {
-    perror("gpioCfgClock()");
+  // Clear all waves
+  if(gpioWaveClear()) {
+    perror("gpioWaveClear()");
     exit(EXIT_FAILURE);
   }
 
-  // Initialise GPIO library with retries
-  for(try = 0; try < INIT_TRIES; try++) {
-    if(gpioInitialise() >= 0) {
-      break;
+  // Reset wave time
+  waveTime = 0;
+}
+
+/***********************************************************************************************************************
+ * Add one pulse to the waveform
+ **********************************************************************************************************************/
+void WaveAddPulse(bool level, uint32_t duration)
+{
+  gpioPulse_t wave[2];
+
+  // We need to start with a delay to be able to append to the wave
+  wave[0].gpioOn = 0;
+  wave[0].gpioOff = 0;
+  wave[0].usDelay = waveTime;
+
+  // Define pulse
+  if(level) {
+    // High
+    wave[1].gpioOn  = 1 << OUTPUT_PIN;
+    wave[1].gpioOff = 0;
+  }
+  else {
+    // Low
+    wave[1].gpioOn  = 0;
+    wave[1].gpioOff = 1 << OUTPUT_PIN;
+  }
+  wave[1].usDelay = duration;
+
+  // Update end marker
+  waveTime += duration;
+
+  // Add pulse to wave
+  if(gpioWaveAddGeneric(2, wave) < 0) {
+    perror("gpioWaveAddGeneric()");
+    exit(EXIT_FAILURE);
+  }
+
+  // Show debug
+  if(waveDebugShortPulseLength) {
+    for(int i = 0; i < (duration / (waveDebugShortPulseLength / 2)); i++) {
+      printf(level ? "‾" : "_");
     }
-    time_sleep(INIT_TRY_SLEEP);
-  }
-  if(try >= INIT_TRIES) {
-    perror("gpioInitialise()");
-    exit(EXIT_FAILURE);
-  }
-
-  // Set Pullups and Pulldowns
-  if(gpioSetPullUpDown(OUTPUT_PIN, PI_PUD_OFF)) {
-    perror("gpioSetPullUpDown()");
-    exit(EXIT_FAILURE);
-  }
-
-  // Set GPIO mode
-  if(gpioSetMode(OUTPUT_PIN, PI_OUTPUT)) {
-    perror("gpioSetMode()");
-    exit(EXIT_FAILURE);
-  }
-
-  // Set GPIO to Low
-  if(gpioWrite(OUTPUT_PIN, 0)) {
-    perror("gpioWrite()");
-    exit(EXIT_FAILURE);
   }
 }
 
 /***********************************************************************************************************************
- * Main
+ * Transmit waveform
  **********************************************************************************************************************/
-int main(int argc, char *argv[])
+void WaveTransmit(uint32_t repetitions)
 {
-  // Provide help if asked for
-  if(argc < 2) {
-    printf("Usage:\n");
+  int wave_id;
+
+  // Close debug message
+  if(waveDebugShortPulseLength) {
+    printf(" (%u µS) x %u\n", waveTime, repetitions);
   }
 
-  // Do init stuff
-  Init();
+  // Create waveform
+  if((wave_id = gpioWaveCreate()) < 0) {
+    perror("gpioWaveCreate()");
+    exit(EXIT_FAILURE);
+  }
 
-  // Call Module handlers
-  Gt9000Handle(argc, argv);
-  Dmv7008Handle(argc, argv);
-  BorgaHandle(argc, argv);
+  // Transmit the waveform 'repetitions' times
+  if(gpioWaveChain((char []) {
+    255, 0,
+      wave_id,
+    255, 1, repetitions, 0
+  }, 7) < 0) {
+    perror("gpioWaveChain()");
+    exit(EXIT_FAILURE);
+  }
 
-  // Terminate the library and clean up
-  gpioTerminate();
+  // Wait until the transmission has been sent out
+  while(gpioWaveTxBusy()) {
+    time_sleep(WAVE_TX_POLL_DELAY);
+  }
 
-  return 0;
+  //  Delete the wave
+  if(gpioWaveDelete(wave_id) < 0) {
+    perror("gpioWaveDelete()");
+    exit(EXIT_FAILURE);
+  }
 }

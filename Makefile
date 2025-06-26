@@ -1,6 +1,6 @@
 TARGET = rftx
 CC = gcc
-CFLAGS = -O3 -Wall -fomit-frame-pointer
+CFLAGS = -O2 -flto -Wall -fomit-frame-pointer
 LIBS = -lpigpio -lpthread -lrt
 LFLAGS = -s
 
@@ -21,7 +21,7 @@ HEADERS = $(wildcard *.h)
 .PRECIOUS: $(TARGET) $(OBJECTS)
 
 $(TARGET): $(OBJECTS)
-	$(CC) $(LFLAGS) $(OBJECTS) -Wall $(LIBS) -o $@
+	$(CC) $(CFLAGS) $(LFLAGS) $(OBJECTS) -Wall $(LIBS) -o $@
 
 clean:
 	-rm -f *.o
