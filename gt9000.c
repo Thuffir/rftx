@@ -51,7 +51,7 @@
 #define ALT_START_PAUSE           7200
 
 // Number of telegram repeats
-#define NUM_REPEATS                  8
+#define NUM_REPEATS                 10
 
 // Name of the module
 static const char moduleName[] = "gt9000";

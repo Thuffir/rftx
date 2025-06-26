@@ -48,7 +48,7 @@
 #define TLG_PAUSE                73700
 
 // Number of telegram repeats
-#define NUM_REPEATS                  4
+#define NUM_REPEATS                 10
 
 // Upper limit of house code
 #define MAX_CODE                 0xFFF
