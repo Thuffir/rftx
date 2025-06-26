@@ -2,7 +2,7 @@
  *
  * Wireless Signal Transmitter for Raspberry Pi
  *
- * (C) 2015 Gergely Budai
+ * By Gergely Budai
  *
  * This is free and unencumbered software released into the public domain.
  *

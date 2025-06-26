@@ -2,7 +2,7 @@
  *
  * Wireless Signal Transmitter for Raspberry Pi
  *
- * (C) 2015 Gergely Budai
+ * By Gergely Budai
  *
  * This is free and unencumbered software released into the public domain.
  *
@@ -37,11 +37,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <pigpio.h>
 
-// Message and wave length
-#define MSG_BITS                    20
-#define WAVE_SIZE                   (1 + (MSG_BITS * 2) + 1)
+#include "wave.h"
 
 // Pulse lengths
 #define SHORT_PULSE                630
@@ -95,108 +92,12 @@ static uint8_t Dmv7008GetChannel(ChannelType channel)
 }
 
 /***********************************************************************************************************************
- * Add one bit to the waveform
+ * Add one bit to the waveform (0 -> __/‾‾‾‾, 1 -> ____/‾‾)
  **********************************************************************************************************************/
-static uint32_t Dmv7008AddBit(gpioPulse_t *wave, uint32_t waveidx, BitType bit)
+static void Dmv7008AddBit(BitType bit)
 {
-  uint32_t firstpulse, secondpulse;
-
-  // Bit One
-  if(bit) {
-    firstpulse = LONG_PULSE;
-    secondpulse = SHORT_PULSE;
-  }
-  // Bit Zero
-  else {
-    firstpulse = SHORT_PULSE;
-    secondpulse = LONG_PULSE;
-  }
-
-  // Add first pulse (Low)
-  wave[waveidx].gpioOn = 0;
-  wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
-  wave[waveidx].usDelay = firstpulse;
-  waveidx++;
-
-  // Add second pulse (High)
-  wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
-  wave[waveidx].gpioOff = 0;
-  wave[waveidx].usDelay = secondpulse;
-  waveidx++;
-
-  return waveidx;
-}
-
-/***********************************************************************************************************************
- * Build Waveform to transmit
- **********************************************************************************************************************/
-static int Dmv7008BuildWave(uint16_t code, ChannelType channel, StateType state)
-{
-  // The waveform
-  gpioPulse_t wave[WAVE_SIZE];
-  int wave_id;
-  uint32_t i, waveidx = 0;
-  uint8_t ch;
-  BitType csum[2] = { BitZero, BitZero }, bit;
-
-  // Add Start Pulse
-  wave[waveidx].gpioOn = (1 << OUTPUT_PIN);
-  wave[waveidx].gpioOff = 0;
-  wave[waveidx].usDelay = SHORT_PULSE;
-  waveidx++;
-
-  // Add Housecode (12 Bits)
-  for(i = 0; i < 12; i++) {
-    waveidx = Dmv7008AddBit(wave, waveidx, (code & (0x800 >> i)) ? BitOne : BitZero);
-  }
-
-  // Add Channel (3 Bits)
-  ch = Dmv7008GetChannel(channel);
-  for(i = 0; i < 3; i++) {
-    bit = (ch & (0x4 >> i)) ? BitOne : BitZero;
-    waveidx = Dmv7008AddBit(wave, waveidx, bit);
-    csum[i % 2] ^= bit;
-  }
-
-  // Add Switch state (1 Bit)
-  bit = (state) ? BitOne : BitZero;
-  waveidx = Dmv7008AddBit(wave, waveidx, bit);
-  csum[1] ^= bit;
-
-  // Add Dim state (1 Bit) (Todo: Not yet supported.)
-  waveidx = Dmv7008AddBit(wave, waveidx, BitZero);
-  // Don't forget the checksum here
-
-  // Add unknown bit (1 Bit) (Zero)
-  waveidx = Dmv7008AddBit(wave, waveidx, BitZero);
-
-  // Add Checksum
-  waveidx = Dmv7008AddBit(wave, waveidx, csum[0]);
-  waveidx = Dmv7008AddBit(wave, waveidx, csum[1]);
-
-  // Add pause at the end
-  wave[waveidx].gpioOn = 0;
-  wave[waveidx].gpioOff = (1 << OUTPUT_PIN);
-  wave[waveidx].usDelay = TLG_PAUSE;
-  waveidx++;
-
-  // Add a new empty waveform
-  if(gpioWaveAddNew()) {
-    perror("gpioWaveAddNew()");
-    exit(EXIT_FAILURE);
-  }
-  // Add pulses to the waveform
-  if(gpioWaveAddGeneric(WAVE_SIZE, wave) < 0) {
-    perror("gpioWaveAddGeneric()");
-    exit(EXIT_FAILURE);
-  }
-  // Create waveform
-  if((wave_id = gpioWaveCreate()) < 0) {
-    perror("gpioWaveCreate()");
-    exit(EXIT_FAILURE);
-  }
-
-  return wave_id;
+  WaveAddPulse(0, bit ? LONG_PULSE : SHORT_PULSE);
+  WaveAddPulse(1, bit ? SHORT_PULSE : LONG_PULSE);
 }
 
 /***********************************************************************************************************************
@@ -204,11 +105,6 @@ static int Dmv7008BuildWave(uint16_t code, ChannelType channel, StateType state)
  **********************************************************************************************************************/
 void Dmv7008Handle(int argc, char *argv[])
 {
-  int wave_id;
-  uint16_t code;
-  ChannelType channel;
-  StateType state;
-
   // Provide help if asked for
   if(argc < 2) {
     printf(" %s %s housecoode[000-FFF] channel[1-5] state[0-1]\n", argv[0], moduleName);
@@ -227,49 +123,67 @@ void Dmv7008Handle(int argc, char *argv[])
   }
 
   // Convert house code
-  code = strtol(argv[2], NULL, 16);
+  uint16_t code = strtol(argv[2], NULL, 16);
   if(code > MAX_CODE) {
     fprintf(stderr, "%s: invalid house code!\n", moduleName);
     exit(EXIT_FAILURE);
   }
 
   // Convert channel number
-  channel = atoi(argv[3]) - 1;
+  ChannelType channel = atoi(argv[3]) - 1;
   if(channel >= ChInvalid) {
     fprintf(stderr, "%s: invalid channel!\n", moduleName);
     exit(EXIT_FAILURE);
   }
 
   // Convert switch state
-  state = atoi(argv[4]);
+  StateType state = atoi(argv[4]);
   if(state >= StateInvalid) {
     fprintf(stderr, "%s: invalid state!\n", moduleName);
     exit(EXIT_FAILURE);
   }
 
-  // Build Telegram Waveform
-  wave_id = Dmv7008BuildWave(code, channel, state);
+  // Init wave
+  WaveInitialize(0);
+  
+  // Add Start Pulse
+  WaveAddPulse(1, SHORT_PULSE);
 
-  // Transmit the waveform NUM_REPEATS times
-  if(gpioWaveChain((char []) {
-    255, 0,
-      wave_id,
-    255, 1, NUM_REPEATS, 0
-  }, 7) < 0) {
-    perror("gpioWaveChain()");
-    exit(EXIT_FAILURE);
+  // Add Housecode (12 Bits)
+  for(int i = 0; i < 12; i++) {
+    Dmv7008AddBit((code & (0x800 >> i)) ? BitOne : BitZero);
   }
 
-  // Wait until the transmission has been sent out
-  while(gpioWaveTxBusy()) {
-    time_sleep(0.1);
+  // Add Channel (3 Bits)
+  BitType csum[2] = { BitZero, BitZero }, bit;
+  uint8_t ch = Dmv7008GetChannel(channel);
+  for(int i = 0; i < 3; i++) {
+    bit = (ch & (0x4 >> i)) ? BitOne : BitZero;
+    Dmv7008AddBit(bit);
+    csum[i % 2] ^= bit;
   }
 
-  //  Delete the wave
-  if(gpioWaveDelete(wave_id) < 0) {
-    perror("gpioWaveDelete()");
-    exit(EXIT_FAILURE);
-  }
+  // Add Switch state (1 Bit)
+  bit = (state) ? BitOne : BitZero;
+  Dmv7008AddBit(bit);
+  csum[1] ^= bit;
+
+  // Add Dim state (1 Bit) (Todo: Not yet supported.)
+  Dmv7008AddBit(BitZero);
+  // Don't forget the checksum here
+
+  // Add unknown bit (1 Bit) (Zero)
+  Dmv7008AddBit(BitZero);
+
+  // Add Checksum
+  Dmv7008AddBit(csum[0]);
+  Dmv7008AddBit(csum[1]);
+
+  // Add pause at the end
+  WaveAddPulse(0, TLG_PAUSE);
+  
+  // Transmit wave
+  WaveTransmit(NUM_REPEATS);
 }
 
 #endif // MODULE_DMV7008_ENABLE
