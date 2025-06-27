@@ -37,7 +37,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-void WaveInitialize(uint32_t debugShortPulseLength);
+void WaveInitialize(uint32_t debugPulseLength);
 void WaveAddPulse(bool level, uint32_t duration);
 void WaveTransmit(uint32_t repetitions);
 

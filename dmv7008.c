@@ -39,16 +39,17 @@
 #include <string.h>
 
 #include "wave.h"
+#include "dmv7008.h"
 
-// Pulse lengths
-#define SHORT_PULSE                630
-#define LONG_PULSE                1292
+// Pulse lengths [µs]
+#define SHORT_PULSE                667
+#define LONG_PULSE                1333
 
-// Pause between repeats
-#define TLG_PAUSE                73700
+// Pause between repeats [µs]
+#define TLG_PAUSE                80000
 
 // Number of telegram repeats
-#define NUM_REPEATS                 10
+#define NUM_REPEATS                  4
 
 // Upper limit of house code
 #define MAX_CODE                 0xFFF
@@ -143,9 +144,15 @@ void Dmv7008Handle(int argc, char *argv[])
     exit(EXIT_FAILURE);
   }
 
-  // Init wave
-  WaveInitialize(0);
-  
+  // Initialize waveform
+  WaveInitialize(
+#ifdef DEBUG
+  SHORT_PULSE
+ #else
+   0
+ #endif
+  );
+
   // Add Start Pulse
   WaveAddPulse(1, SHORT_PULSE);
 
@@ -181,7 +188,7 @@ void Dmv7008Handle(int argc, char *argv[])
 
   // Add pause at the end
   WaveAddPulse(0, TLG_PAUSE);
-  
+
   // Transmit wave
   WaveTransmit(NUM_REPEATS);
 }

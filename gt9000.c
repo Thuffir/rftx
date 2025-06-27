@@ -43,15 +43,15 @@
 
 // Pulse lengths
 #define SHORT_PULSE                400
-#define LONG_PULSE                1100
-#define START_PAUSE               2300
+#define LONG_PULSE                1200
+#define START_PAUSE               2400
 
 // Alternative start pulse length
 #define ALT_START_PULSE           3000
 #define ALT_START_PAUSE           7200
 
 // Number of telegram repeats
-#define NUM_REPEATS                 10
+#define NUM_REPEATS                  8
 
 // Name of the module
 static const char moduleName[] = "gt9000";
@@ -164,8 +164,14 @@ void Gt9000Handle(int argc, char *argv[])
     exit(EXIT_FAILURE);
   }
 
-  // Init wave
-  WaveInitialize(0);
+  // Initialize waveform
+  WaveInitialize(
+#ifdef DEBUG
+  SHORT_PULSE
+ #else
+   0
+ #endif
+  );
 
   // Add Start Pulse
   WaveAddPulse(1, SHORT_PULSE);

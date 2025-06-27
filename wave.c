@@ -38,8 +38,8 @@
 #include <stdio.h>
 #include <pigpio.h>
 
-// Short pulse length for debug visualisation (0 -> disable)
-static uint32_t waveDebugShortPulseLength = 0;
+// Pulse length for debug visualisation (0 -> disable)
+static uint32_t waveDebugPulseLength = 0;
 
 // Running wave time
 static uint32_t waveTime = 0;
@@ -47,8 +47,48 @@ static uint32_t waveTime = 0;
 /***********************************************************************************************************************
  * Initialize a new wave
  **********************************************************************************************************************/
-void WaveInitialize(uint32_t debugShortPulseLength)
+void WaveInitialize(uint32_t debugPulseLength)
 {
+  // Disable interfaces
+  gpioCfgInterfaces(PI_DISABLE_FIFO_IF | PI_DISABLE_SOCK_IF);
+
+  // Set sample rate
+  if(gpioCfgClock(10, PI_CLOCK_PCM, 0)) {
+    perror("gpioCfgClock()");
+    exit(EXIT_FAILURE);
+  }
+
+  // Initialise GPIO library with retries
+  uint32_t try;
+  for(try = 0; try < INIT_TRIES; try++) {
+    if(gpioInitialise() >= 0) {
+      break;
+    }
+    time_sleep(INIT_TRY_SLEEP);
+  }
+  if(try >= INIT_TRIES) {
+    perror("gpioInitialise()");
+    exit(EXIT_FAILURE);
+  }
+
+  // Set Pullups and Pulldowns
+  if(gpioSetPullUpDown(OUTPUT_PIN, PI_PUD_OFF)) {
+    perror("gpioSetPullUpDown()");
+    exit(EXIT_FAILURE);
+  }
+
+  // Set GPIO mode
+  if(gpioSetMode(OUTPUT_PIN, PI_OUTPUT)) {
+    perror("gpioSetMode()");
+    exit(EXIT_FAILURE);
+  }
+
+  // Set GPIO to Low
+  if(gpioWrite(OUTPUT_PIN, 0)) {
+    perror("gpioWrite()");
+    exit(EXIT_FAILURE);
+  }
+
   // Clear all waves
   if(gpioWaveClear()) {
     perror("gpioWaveClear()");
@@ -58,8 +98,8 @@ void WaveInitialize(uint32_t debugShortPulseLength)
   // Reset wave time
   waveTime = 0;
 
-  // Set debug short pulse length
-  waveDebugShortPulseLength = debugShortPulseLength;
+  // Set debug pulse length
+  waveDebugPulseLength = debugPulseLength;
 }
 
 /***********************************************************************************************************************
@@ -97,8 +137,16 @@ void WaveAddPulse(bool level, uint32_t duration)
   }
 
   // Show debug
-  if(waveDebugShortPulseLength) {
-    for(int i = 0; i < (duration / (waveDebugShortPulseLength / 2)); i++) {
+  if(waveDebugPulseLength) {
+    static bool lastlevel = 0;
+    // One character corresponds to the half of the pulse length
+    for(int i = 0; i < (duration / (waveDebugPulseLength / 2)); i++) {
+      // Draw egdes
+      if(lastlevel != level) {
+        printf(level ? "/" : "\\");
+        lastlevel = level;
+      }
+      // Draw signal levels
       printf(level ? "‾" : "_");
     }
   }
@@ -112,8 +160,8 @@ void WaveTransmit(uint32_t repetitions)
   int wave_id;
 
   // Close debug message
-  if(waveDebugShortPulseLength) {
-    printf(" (%u µS) x %u\n", waveTime, repetitions);
+  if(waveDebugPulseLength) {
+    printf(" %u µS x %u = %u ms\n", waveTime, repetitions, waveTime * repetitions / 1000);
   }
 
   // Create waveform
@@ -142,4 +190,7 @@ void WaveTransmit(uint32_t repetitions)
     perror("gpioWaveDelete()");
     exit(EXIT_FAILURE);
   }
+
+  // Terminate the library and clean up
+  gpioTerminate();
 }

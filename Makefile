@@ -4,6 +4,10 @@ CFLAGS = -O2 -flto -Wall -fomit-frame-pointer
 LIBS = -lpigpio -lpthread -lrt
 LFLAGS = -s
 
+ifdef DEBUG
+CFLAGS += -DDEBUG
+endif
+
 INSTALLDIR = /opt/fhem
 INSTALL = sudo install -m 4755 -o root -g root
 
