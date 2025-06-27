@@ -4,6 +4,9 @@ CFLAGS = -O2 -flto -Wall -fomit-frame-pointer
 LIBS = -lpigpio -lpthread -lrt
 LFLAGS = -s
 
+GIT_VERSION := $(shell git describe --abbrev=8 --dirty=* --always)
+CFLAGS += -DGIT_VERSION="\"$(GIT_VERSION)\""
+
 ifdef DEBUG
 CFLAGS += -DDEBUG
 endif

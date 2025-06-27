@@ -39,6 +39,10 @@
 #include "dmv7008.h"
 #include "borga.h"
 
+#ifndef GIT_VERSION
+#define GIT_VERSION "Unknown"
+#endif
+
 /***********************************************************************************************************************
  * Main
  **********************************************************************************************************************/
@@ -46,7 +50,7 @@ int main(int argc, char *argv[])
 {
   // Provide help if asked for
   if(argc < 2) {
-    printf("Usage:\n");
+    printf("RFTX ("GIT_VERSION") Usage:\n");
   }
 
   // Call Module handlers
