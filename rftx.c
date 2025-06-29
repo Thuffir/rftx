@@ -50,7 +50,7 @@ int main(int argc, char *argv[])
 {
   // Provide help if asked for
   if(argc < 2) {
-    printf("RFTX ("GIT_VERSION") Usage:\n");
+    printf("RFTX ("__DATE__" - "GIT_VERSION")\n");
   }
 
   // Call Module handlers
