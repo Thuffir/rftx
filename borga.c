@@ -65,9 +65,6 @@ static void BorgaAddBit(bool bit)
  **********************************************************************************************************************/
 void BorgaHandle(int argc, char *argv[])
 {
-  uint8_t channel;
-  char command;
-
   // Provide help if asked for
   if(argc < 2) {
     printf(" %s %s channel[0-15] [F]an/[L]ight/[S]peed/[T]imer\n", argv[0], moduleName);
@@ -86,42 +83,53 @@ void BorgaHandle(int argc, char *argv[])
   }
 
   // Convert channel number
-  channel = atoi(argv[2]);
+  uint8_t channel = atoi(argv[2]);
   if(channel > 15) {
     fprintf(stderr, "%s: invalid channel!\n", moduleName);
     exit(EXIT_FAILURE);
   }
 
   // Store command char
-  command = toupper(argv[3][0]);
+  char command = toupper(argv[3][0]);
 
   // Initialize waveform
   WaveInitialize(
 #ifdef DEBUG
-  SHORT_PULSE
- #else
-   0
- #endif
+    SHORT_PULSE
+#else
+    0
+#endif
   );
 
   // Add start pulse
   WaveAddPulse(1, SHORT_PULSE);
 
-  // Bit 0..1: Unknown
-  BorgaAddBit(0);
-  BorgaAddBit(0);
-  // Bit 2: Fan toggle
-  BorgaAddBit(command == 'F');
-  // Bit 3: Unknown
-  BorgaAddBit(0);
-  // Bit 4: Unknown (Reverse toggle?)
-  BorgaAddBit(0);
-  // Bit 5: Timer
-  BorgaAddBit(command == 'T');
-  // Bit 6: Speed
-  BorgaAddBit(command == 'S');
-  // Bit 7: Light toggle
-  BorgaAddBit(command == 'L');
+#ifdef DEBUG
+  if(command == 'D') {
+    for(int i = 1; i <= 8; i++) {
+      BorgaAddBit((argv[3][i] == '1'));
+    }
+  }
+  else {
+#endif
+    // Bit 0..1: Unknown
+    BorgaAddBit(0);
+    BorgaAddBit(0);
+    // Bit 2: Fan toggle
+    BorgaAddBit(command == 'F');
+    // Bit 3: Unknown
+    BorgaAddBit(0);
+    // Bit 4: Unknown (Reverse toggle?)
+    BorgaAddBit(command == 'R');
+    // Bit 5: Timer
+    BorgaAddBit(command == 'T');
+    // Bit 6: Speed
+    BorgaAddBit(command == 'S');
+    // Bit 7: Light toggle
+    BorgaAddBit(command == 'L');
+#ifdef DEBUG
+  }
+#endif
   // Bit 8..11: Address
   for(uint8_t mask = 8; mask != 0; mask >>= 1) {
     BorgaAddBit(channel & mask);
